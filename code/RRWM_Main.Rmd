@@ -1,0 +1,49 @@
+---
+title: "RRWM"
+author: "Chris Borst"
+date: "2023-09-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Reproducible Research and Workflow Management Data Activity
+
+Knitting this RMarkdown document will reproduce all results generated.
+
+**NOTE: FIRST MANUALLY CHANGE THE FILE PATH IN config.R TO YOUR DESIRED WORKING DIRECTORY**
+Because the raw data cannot be shared, the scripts assume that the raw data is located in 
+the **parent** directory of the working directory.
+
+I am not confident that the package bundler has worked as intended. I tried checkpoint first, but
+it threw an error, suggesting that not all the packages used were available at the checkpoint.
+This uses renv. Everything *looks* right, but when I render it says there's no lockfile. But the
+lockfile is _right there_. If this throws an error for you, open config.R and delete the first line.
+Everything else works.
+
+```{r config}
+source(here::here("code","config.R"))
+```
+
+
+```{r data_cleaning}
+source(here::here("code","GSS_Data_Cleaning.R"))
+```
+
+
+```{r tables}
+source(here::here("code","Basic_tables.R"))
+```
+
+
+```{r model}
+source(here::here("code","Model.R"))
+```
+
+
+```{r results}
+source(here::here("code","Results_tables.R"))
+```
+

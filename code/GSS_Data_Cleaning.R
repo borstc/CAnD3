@@ -1,0 +1,159 @@
+require(dplyr)
+
+raw_data <- read.csv(file.path("..","gss-12M0025-E-2017-c-31_F1.csv"))
+
+## SELECT ROWS
+
+cases_with_children <- raw_data[raw_data$TOTCHDC > 0 & raw_data$TOTCHDC < 96,]
+
+children_live_with_R <- subset(cases_with_children, HHDSTA1 %in% c(1, 2) | HHDSTA2 %in% c(1, 2) | HHDSTA3 %in% c(1, 2) | 
+                                 HHDSTA4 %in% c(1, 2) | HHDSTA5 %in% c(1, 2) | HHDSTA6 %in% c(1, 2) | HHDSTA7 %in% c(1, 2))
+
+children_to_age_12 <- subset(children_live_with_R, ACHD_1C < 13 | ACHD_2C < 13 | ACHD_3C < 13 | ACHD_4C < 13 | 
+                               ACHD_5C < 13 | ACHD_6C < 13 | ACHD_7C < 13)
+
+## SELECT VARIABLES
+
+# Respondent age: AGEC (integer years, 15 to 79, and 80+)
+# Respondent 'sex': SEX (1 = Male, 2 = Female)
+# Respondent marital status: MARSTAT (1 = Married, 2 = Common-law, 3 = Widowed, 4 = Separated, 5 = Divorced, 6 = Single)
+# Family income before tax: FAMINCG2 ($25K bands, 1 = < $25K, ..., 6 = $125K+)
+# Respondent highest education: EHG3_01B (1 = <HS, 2 = HS, 3 = Trade, 4 = College, 5 = Uni <BA, 6 = Uni BA, 7 = Uni >BA)
+# Respondent born in Canada: BRTHCAN (1 = Yes, 2 = No)
+# Respondent visible minority: VISMIN (1 = Yes, 2 = No)
+# Participation in religious activities: REE_02 (1 = min weekly, 2 = min monthly, 3 = min 3/yr, 4 = min yearly, 5 = no)
+#
+# Childcare variables: CC_10_1, CC_10_2, CC_10_3, CC_10_4, CC_10_5, CC_10_6, CC_10_7, 
+#                      CC_20_1, CC_20_2, CC_20_3, CC_20_4, CC_20_5, CC_20_6, CC_20_7,
+#                      CC_30_1, CC_30_2, CC_30_3, CC_30_4, CC_30_5, CC_30_6, CC_30_7,
+#                      CC_40_1, CC_40_2, CC_40_3, CC_40_4, CC_40_5, CC_40_6, CC_40_7,
+#                      CP_10_1, CP_10_2, CP_10_3, CP_10_4, CP_10_5, CP_10_6, CP_10_7,
+#                      CP_20_1, CP_20_2, CP_20_3, CP_20_4, CP_20_5, CP_20_6, CP_20_7
+
+selected_variables <- subset(children_to_age_12, select = c(AGEC, SEX, MARSTAT, FAMINCG2, EHG3_01B, BRTHCAN, VISMIN, REE_02,
+                                                            CC_10_1, CC_10_2, CC_10_3, CC_10_4, CC_10_5, CC_10_6, CC_10_7, 
+                                                            CC_20_1, CC_20_2, CC_20_3, CC_20_4, CC_20_5, CC_20_6, CC_20_7,
+                                                            CC_30_1, CC_30_2, CC_30_3, CC_30_4, CC_30_5, CC_30_6, CC_30_7,
+                                                            CC_40_1, CC_40_2, CC_40_3, CC_40_4, CC_40_5, CC_40_6, CC_40_7,
+                                                            CP_10_1, CP_10_2, CP_10_3, CP_10_4, CP_10_5, CP_10_6, CP_10_7,
+                                                            CP_20_1, CP_20_2, CP_20_3, CP_20_4, CP_20_5, CP_20_6, CP_20_7))
+
+## CONSTRUCT DEPENDENT VARIABLE (RECOGNIZES ONE PREFERENCE PER RESPONDENT)
+
+# Recognized child care preferences (CP_20_1):            Equivalent
+#
+#   1     Child cared for by respondent or spouse         CC_10_* == 2 | CC_20_* == 2
+#   2     Care in someone's home by a non-relative        CC_30_* == 2 & CC_40_* == 2
+#   3     Care in someone's home by a relative            CC_30_* == 2 & CC_40_* == 1
+#   4     Care in child's home by a non-relative          CC_30_* == 1 & CC_40_* == 2
+#   5     Care in child's home by a relative              CC_30_* == 1 & CC_40_* == 1
+#   6     Daycare centre [or CPE/Blank]                   CC_30_* == 4
+#   7     Before and after school program                 CC_30_* == 5
+#   8     Nursery school / preschool                      CC_30_* == 3
+#   9     Other                                           CC_30_* == 6
+
+pref_1 <- with(selected_variables, case_when(CP_20_1 == 1 | (CP_10_1 != 1 & (CC_10_1 == 2 | CC_20_1 == 2)) ~ 1,
+                   CP_20_1 == 2 | (CP_10_1 != 1 & (CC_30_1 == 2 & CC_40_1 == 2)) ~ 2,
+                   CP_20_1 == 3 | (CP_10_1 != 1 & (CC_30_1 == 2 & CC_40_1 == 1)) ~ 3,
+                   CP_20_1 == 4 | (CP_10_1 != 1 & (CC_30_1 == 1 & CC_40_1 == 2)) ~ 4,
+                   CP_20_1 == 5 | (CP_10_1 != 1 & (CC_30_1 == 1 & CC_40_1 == 1)) ~ 5,
+                   CP_20_1 == 6 | (CP_10_1 != 1 & CC_30_1 == 4) ~ 6,
+                   CP_20_1 == 7 | (CP_10_1 != 1 & CC_30_1 == 5) ~ 7,
+                   CP_20_1 == 8 | (CP_10_1 != 1 & CC_30_1 == 3) ~ 8,
+                   CP_20_1 == 9 | (CP_10_1 != 1 & CC_30_1 == 6) ~ 9))
+
+pref_2 <- with(selected_variables, case_when(CP_20_2 == 1 | (CP_10_2 != 1 & (CC_10_2 == 2 | CC_20_2 == 2)) ~ 1,
+                   CP_20_2 == 2 | (CP_10_2 != 1 & (CC_30_2 == 2 & CC_40_2 == 2)) ~ 2,
+                   CP_20_2 == 3 | (CP_10_2 != 1 & (CC_30_2 == 2 & CC_40_2 == 1)) ~ 3,
+                   CP_20_2 == 4 | (CP_10_2 != 1 & (CC_30_2 == 1 & CC_40_2 == 2)) ~ 4,
+                   CP_20_2 == 5 | (CP_10_2 != 1 & (CC_30_2 == 1 & CC_40_2 == 1)) ~ 5,
+                   CP_20_2 == 6 | (CP_10_2 != 1 & CC_30_2 == 4) ~ 6,
+                   CP_20_2 == 7 | (CP_10_2 != 1 & CC_30_2 == 5) ~ 7,
+                   CP_20_2 == 8 | (CP_10_2 != 1 & CC_30_2 == 3) ~ 8,
+                   CP_20_2 == 9 | (CP_10_2 != 1 & CC_30_2 == 6) ~ 9))
+
+pref_3 <- with(selected_variables, case_when(CP_20_3 == 1 | (CP_10_3 != 1 & (CC_10_3 == 2 | CC_20_3 == 2)) ~ 1,
+                                             CP_20_3 == 2 | (CP_10_3 != 1 & (CC_30_3 == 2 & CC_40_3 == 2)) ~ 2,
+                                             CP_20_3 == 3 | (CP_10_3 != 1 & (CC_30_3 == 2 & CC_40_3 == 1)) ~ 3,
+                                             CP_20_3 == 4 | (CP_10_3 != 1 & (CC_30_3 == 1 & CC_40_3 == 2)) ~ 4,
+                                             CP_20_3 == 5 | (CP_10_3 != 1 & (CC_30_3 == 1 & CC_40_3 == 1)) ~ 5,
+                                             CP_20_3 == 6 | (CP_10_3 != 1 & CC_30_3 == 4) ~ 6,
+                                             CP_20_3 == 7 | (CP_10_3 != 1 & CC_30_3 == 5) ~ 7,
+                                             CP_20_3 == 8 | (CP_10_3 != 1 & CC_30_3 == 3) ~ 8,
+                                             CP_20_3 == 9 | (CP_10_3 != 1 & CC_30_3 == 6) ~ 9))
+
+pref_4 <- with(selected_variables, case_when(CP_20_4 == 1 | (CP_10_4 != 1 & (CC_10_4 == 2 | CC_20_4 == 2)) ~ 1,
+                                             CP_20_4 == 2 | (CP_10_4 != 1 & (CC_30_4 == 2 & CC_40_4 == 2)) ~ 2,
+                                             CP_20_4 == 3 | (CP_10_4 != 1 & (CC_30_4 == 2 & CC_40_4 == 1)) ~ 3,
+                                             CP_20_4 == 4 | (CP_10_4 != 1 & (CC_30_4 == 1 & CC_40_4 == 2)) ~ 4,
+                                             CP_20_4 == 5 | (CP_10_4 != 1 & (CC_30_4 == 1 & CC_40_4 == 1)) ~ 5,
+                                             CP_20_4 == 6 | (CP_10_4 != 1 & CC_30_4 == 4) ~ 6,
+                                             CP_20_4 == 7 | (CP_10_4 != 1 & CC_30_4 == 5) ~ 7,
+                                             CP_20_4 == 8 | (CP_10_4 != 1 & CC_30_4 == 3) ~ 8,
+                                             CP_20_4 == 9 | (CP_10_4 != 1 & CC_30_4 == 6) ~ 9))
+
+pref_5 <- with(selected_variables, case_when(CP_20_5 == 1 | (CP_10_5 != 1 & (CC_10_5 == 2 | CC_20_5 == 2)) ~ 1,
+                                             CP_20_5 == 2 | (CP_10_5 != 1 & (CC_30_5 == 2 & CC_40_5 == 2)) ~ 2,
+                                             CP_20_5 == 3 | (CP_10_5 != 1 & (CC_30_5 == 2 & CC_40_5 == 1)) ~ 3,
+                                             CP_20_5 == 4 | (CP_10_5 != 1 & (CC_30_5 == 1 & CC_40_5 == 2)) ~ 4,
+                                             CP_20_5 == 5 | (CP_10_5 != 1 & (CC_30_5 == 1 & CC_40_5 == 1)) ~ 5,
+                                             CP_20_5 == 6 | (CP_10_5 != 1 & CC_30_5 == 4) ~ 6,
+                                             CP_20_5 == 7 | (CP_10_5 != 1 & CC_30_5 == 5) ~ 7,
+                                             CP_20_5 == 8 | (CP_10_5 != 1 & CC_30_5 == 3) ~ 8,
+                                             CP_20_5 == 9 | (CP_10_5 != 1 & CC_30_5 == 6) ~ 9))
+
+pref_6 <- with(selected_variables, case_when(CP_20_6 == 1 | (CP_10_6 != 1 & (CC_10_6 == 2 | CC_20_6 == 2)) ~ 1,
+                                             CP_20_6 == 2 | (CP_10_6 != 1 & (CC_30_6 == 2 & CC_40_6 == 2)) ~ 2,
+                                             CP_20_6 == 3 | (CP_10_6 != 1 & (CC_30_6 == 2 & CC_40_6 == 1)) ~ 3,
+                                             CP_20_6 == 4 | (CP_10_6 != 1 & (CC_30_6 == 1 & CC_40_6 == 2)) ~ 4,
+                                             CP_20_6 == 5 | (CP_10_6 != 1 & (CC_30_6 == 1 & CC_40_6 == 1)) ~ 5,
+                                             CP_20_6 == 6 | (CP_10_6 != 1 & CC_30_6 == 4) ~ 6,
+                                             CP_20_6 == 7 | (CP_10_6 != 1 & CC_30_6 == 5) ~ 7,
+                                             CP_20_6 == 8 | (CP_10_6 != 1 & CC_30_6 == 3) ~ 8,
+                                             CP_20_6 == 9 | (CP_10_6 != 1 & CC_30_6 == 6) ~ 9))
+
+pref_7 <- with(selected_variables, case_when(CP_20_7 == 1 | (CP_10_7 != 1 & (CC_10_7 == 2 | CC_20_7 == 2)) ~ 1,
+                                             CP_20_7 == 2 | (CP_10_7 != 1 & (CC_30_7 == 2 & CC_40_7 == 2)) ~ 2,
+                                             CP_20_7 == 3 | (CP_10_7 != 1 & (CC_30_7 == 2 & CC_40_7 == 1)) ~ 3,
+                                             CP_20_7 == 4 | (CP_10_7 != 1 & (CC_30_7 == 1 & CC_40_7 == 2)) ~ 4,
+                                             CP_20_7 == 5 | (CP_10_7 != 1 & (CC_30_7 == 1 & CC_40_7 == 1)) ~ 5,
+                                             CP_20_7 == 6 | (CP_10_7 != 1 & CC_30_7 == 4) ~ 6,
+                                             CP_20_7 == 7 | (CP_10_7 != 1 & CC_30_7 == 5) ~ 7,
+                                             CP_20_7 == 8 | (CP_10_7 != 1 & CC_30_7 == 3) ~ 8,
+                                             CP_20_7 == 9 | (CP_10_7 != 1 & CC_30_7 == 6) ~ 9))
+
+# Set preference to preference for the last listed child, presumed to be the youngest (not checked)
+
+prefs <- case_when(is.na(pref_7) == FALSE ~ pref_7,
+                   is.na(pref_6) == FALSE ~ pref_6,
+                   is.na(pref_5) == FALSE ~ pref_5,
+                   is.na(pref_4) == FALSE ~ pref_4,
+                   is.na(pref_3) == FALSE ~ pref_3,
+                   is.na(pref_2) == FALSE ~ pref_2,
+                   is.na(pref_1) == FALSE ~ pref_1)
+
+final_data <- data.frame(cc_pref = prefs)
+
+## RECODE DEMOGRAPHIC VARIABLES
+
+final_data$age <- selected_variables$AGEC
+final_data$genderF <- recode(selected_variables$SEX, `1` = FALSE, `2` = TRUE)
+final_data$marital_status <- recode(selected_variables$MARSTAT, `1` = 1, `2` = 1, `3` = 2, `4` = 2, `5` = 2, `6` = 0)
+final_data$family_income <- selected_variables$FAMINCG2
+final_data$education <- selected_variables$EHG3_01B
+final_data$bornCan <- recode(selected_variables$BRTHCAN, `1` = TRUE, `2` = FALSE)
+final_data$visible_minority <- recode(selected_variables$VISMIN, `1` = TRUE, `2` = FALSE)
+final_data$religious_activity <- recode(selected_variables$REE_02, `1` = 4, `2` = 3, `3` = 2, `4` = 1, `5` = 0)
+
+## REPLACE Valid skip, Don't know, Refusal, Not stated WITH MISSING VALUES (WHERE NOT ALREADY DONE)
+
+final_data$education[final_data$education > 7] <- NA
+
+## FINALIZE DATA BY REMOVING CASES WHERE THE DV IS MISSING
+
+final_data <- final_data[!is.na(final_data$cc_pref),]
+
+## CLEAN UP
+
+rm(raw_data,cases_with_children,children_live_with_R,children_to_age_12,selected_variables,
+   pref_1,pref_2,pref_3,pref_4,pref_5,pref_6,pref_7,prefs)
